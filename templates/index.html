@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+
+    <style>
+        html, body, #indexer { margin: 0; padding: 0;
+            overflow-y: hidden;
+            overflow-x: hidden;
+        }
+        #thumbnails { background-color: #445e6d; clear: both; }
+
+        #indexer, #subindexer, #subsubindexer {
+            margin: 0;
+            padding: 0;
+            float: left;
+        }
+
+    </style>
+</head>
+<body>
+
+<canvas id="indexer"></canvas>
+<canvas id="subindexer"></canvas>
+<canvas id="subsubindexer"></canvas>
+
+<div id="thumbnails">
+
+</div>
+
+<script>
+    let canvas = document.getElementById("indexer");
+    let canvas2 = document.getElementById("subindexer");
+    let canvas3 = document.getElementById("subsubindexer");
+    let thumbs = document.getElementById("thumbnails");
+    let ctx = canvas.getContext("2d");
+    let ctx2 = canvas2.getContext("2d");
+    let ctx3 = canvas3.getContext("2d");
+    let axis_data = [];
+    let selected_x = 0;
+    let selected_x2 = 0;
+    let selected_x3 = 0;
+    let selected_idx = 0;
+    let selected_idx2 = 0;
+    let selected_idx3 = 0;
+    // let selected_width = window.innerWidth;
+    let requested = -1;
+    let num_files = 0;
+
+    function request_thumbs(force)
+    {
+        let specific_index = 0;
+        if (force) {
+            specific_index = requested;
+        } else {
+            // calculate percentage and actual index... this is going to be a bit ugly..
+            let index1 = axis_data[selected_idx3].index;
+            let index2 = num_files;
+            if (selected_idx3 + 1 < axis_data.length) {
+                index2 = axis_data[selected_idx3 + 1].index;
+            }
+                let data_idx = 0;
+                let perc = (selected_x / window.innerWidth) * 100 + (selected_x2 / window.innerWidth);
+                let x1 = 0;
+                let x2 = window.innerWidth;
+                for (let i = 0; i < window.innerWidth; i++) {
+                    let subperc = i / window.innerWidth;
+                    while (data_idx < axis_data.length && axis_data[data_idx].percentage < perc + subperc) {
+                        data_idx++;
+                        if (data_idx >= axis_data) {
+                            data_idx = axis_data.length - 1;
+                            break;
+                        }
+                        if (axis_data[selected_idx3] === axis_data[data_idx]) {
+                            console.log("found idx3: " + i);
+                            x1 = i;
+                        }
+                        if (selected_idx3 + 1 < axis_data.length) {
+                            if (axis_data[selected_idx3 + 1] === axis_data[data_idx]) {
+                                console.log("found idx3 + 1: " + i, "a", axis_data[data_idx], "b", axis_data[selected_idx3 + 1], "due to: ", axis_data[data_idx].percentage, " and ", perc, subperc);
+                                x2 = i;
+                            }
+                        }
+                    }
+                }
+                // hack, the 1nd pivot is out of the element
+                if (x1 === 0) {
+                    x1 = 0;
+                }
+                // hack, the 2nd pivot is out of the element
+                if (x2 === 0) {
+                    x2 = window.innerWidth;
+                }
+                let ratio = (selected_x3 - x1) / (x2 - x1);
+                specific_index = Math.floor((ratio * (index2 - index1)) + index1);
+                console.log(x1, x2, selected_x3, ratio, specific_index);
+            //} else {
+            //    specific_index = axis_data[selected_idx3].index; // we cannot estimate near the end..
+            //}
+            if (requested === specific_index) {
+                return; // avoid dupe
+            }
+            requested = specific_index;
+            console.log("updating requested to: " + requested);
+        }
+        console.log("requesting thumbs for index: " + specific_index);
+        fetch('http://0.0.0.0:18080/get/' + specific_index + "/" + thumbs.clientWidth + "/" + thumbs.clientHeight + "/200/200")
+            .then(function (response) {
+                // Successfull fetch return as json
+                return response.json();
+            })
+            .then(function (data) {
+                // Data now contains the json
+
+                thumbs.innerHTML = '';
+                for (let img of data) {
+                    let img1 = document.createElement("img");
+                    img1.width = img.width;
+                    img1.height = img.height;
+                    img1.style.position = 'absolute';
+                    img1.style.left = img.x + 'px';
+                    img1.style.top = (img.y + 200) + 'px';
+                    img1.style.backgroundColor = 'red';
+                    img1.src = "https://photoapp.cppse.nl/shadow_dir/" + img.url;
+                    thumbs.appendChild(img1);
+                }
+            })
+            .catch(function (error) {
+                // A Error occured
+                console.log(error);
+            });
+    }
+
+
+    function update(x, y)
+    {
+        canvas.style.width = window.innerWidth + 'px';
+        canvas.width = window.innerWidth;
+        canvas.height = 50;
+
+        ctx.fillStyle = "#000000";
+        ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
+        ctx.font = "16px Arial";
+
+        let data_idx = 0;
+        let last_year = 0;
+        let selected = false;
+        for (let i=0; i<window.innerWidth; i++) {
+            let perc = (i / window.innerWidth) * 100;
+            while (axis_data[data_idx].percentage < perc) {
+                data_idx++;
+            }
+            if (axis_data[data_idx].year !== last_year) {
+                ctx.fillStyle = "#ffffff";
+                ctx.fillRect(i, 0, 1, 50);
+                ctx.fillStyle = "#ffffff";
+                ctx.fillText("" + axis_data[data_idx].year, i, 20);
+            }
+            if (!selected && i >= selected_x) {
+                ctx.fillStyle = "#6666ff";
+                ctx.fillRect(i, 0, 1, 50);
+                selected = true;
+                selected_idx = data_idx;
+            }
+            last_year = axis_data[data_idx].year;
+        }
+    }
+
+    function update2(x, y)
+    {
+        canvas2.style.width = window.innerWidth + 'px';
+        canvas2.width = window.innerWidth;
+        canvas2.height = 50;
+
+        ctx2.fillStyle = "#333333"
+        ctx2.fillRect(0, 0, window.innerWidth, window.innerHeight);
+        ctx2.font = "16px Arial";
+        ctx2.fillStyle = "#ffffff";
+        let perc = (x / window.innerWidth) * 100;
+        let data_idx = 0;
+        while (axis_data[data_idx].percentage < perc) {
+            data_idx++;
+        }
+        let last_month = 0;
+        let selected = false;
+        // ctx2.fillText(data_idx + "~ " + axis_data[data_idx].year + " - " + axis_data[data_idx].month + " - " + axis_data[data_idx].day, 10, 50);
+        for (let i=0; i<window.innerWidth; i++) {
+            let subperc = (i / window.innerWidth);
+            while (data_idx < axis_data.length && axis_data[data_idx].percentage < perc + subperc) {
+                data_idx++;
+            }
+            if (data_idx >= axis_data.length) {
+                data_idx = axis_data.length - 1;
+            }
+            if (axis_data[data_idx].month !== last_month) {
+                ctx2.fillStyle = "#ffffff";
+                ctx2.fillRect(i, 0, 1, 50);
+                ctx2.fillStyle = "#ffffff";
+                ctx2.fillText("" + axis_data[data_idx].month, i, 20);
+            }
+            if (!selected && i >= selected_x2) {
+                ctx2.fillStyle = "#6666ff";
+                ctx2.fillRect(i, 0, 1, 50);
+                selected = true;
+                selected_idx2 = data_idx;
+            }
+            last_month = axis_data[data_idx].month;
+        }
+    }
+
+    function update3(x, y)
+    {
+        canvas3.style.width = window.innerWidth + 'px';
+        canvas3.width = window.innerWidth;
+        canvas3.height = 100;
+
+        ctx3.fillStyle = "#666666";
+        ctx3.fillRect(0, 0, window.innerWidth, window.innerHeight);
+        ctx3.font = "16px Arial";
+        ctx3.fillStyle = "#ffffff";
+
+        let perc = (selected_x / window.innerWidth) * 100;
+        perc += (x / window.innerWidth);
+        let data_idx = 0;
+        while (data_idx < axis_data.length && axis_data[data_idx].percentage < perc) {
+            data_idx++;
+        }
+        if (data_idx >= axis_data.length) {
+            data_idx = axis_data.length - 1;
+        }
+        let last_day = 0;
+        let mod = 0;
+        let selected = false;
+        // ctx3.fillText(data_idx + "~ " + axis_data[data_idx].year + " - " + axis_data[data_idx].month + " - " + axis_data[data_idx].day, 10, 50);
+        for (let i=0; i<window.innerWidth; i++) {
+            let subperc = (i / window.innerWidth);
+            while (data_idx < axis_data.length && axis_data[data_idx].percentage < perc + subperc) {
+                data_idx++;
+            }
+            if (data_idx >= axis_data.length) {
+                data_idx = axis_data.length - 1;
+            }
+            if (axis_data[data_idx].day !== last_day) {
+                ctx3.fillStyle = "#ffffff";
+                ctx3.fillRect(i, 0, 1, 100);
+                ctx3.fillStyle = "#ffffff";
+                ctx3.fillText("" + axis_data[data_idx].day, i, 20 * mod);
+                mod++;
+                mod = mod % 5;
+            }
+            if (!selected && i >= selected_x3) {
+                ctx3.fillStyle = "#ff0000";
+                ctx3.fillRect(i, 0, 1, 100);
+                selected = true;
+                selected_idx3 = data_idx; // unused for now
+                ctx3.fillText(axis_data[data_idx].year + " - " + axis_data[data_idx].month + " - " + axis_data[data_idx].day, 10, 50);
+            }
+            last_day = axis_data[data_idx].day;
+        }
+    }
+
+    window.onload = function () {
+
+        thumbs.style.height = (window.innerHeight - 200) + 'px';
+        fetch('http://0.0.0.0:18080/num_images')
+            .then(function (response) {
+                return response.json();
+            })
+            .then(function (data) {
+                num_files = data;
+            })
+            .catch(function (error) {
+                console.log(error);
+            });
+
+        fetch('http://0.0.0.0:18080/get_time_indexes')
+            .then(function (response) {
+                // Successfull fetch return as json
+                return response.json();
+            })
+            .then(function (data) {
+                // Data now contains the json
+                axis_data = data;
+                update();
+            })
+            .catch(function (error) {
+                // A Error occured
+                console.log(error);
+            });
+    }
+
+    function fix_selected_indexes()
+    {
+        let data_idx = 0;
+        for (let i=0; i<window.innerWidth; i++) {
+            let perc = (i / window.innerWidth) * 100;
+            while (axis_data[data_idx].percentage < perc) {
+                data_idx++;
+                if (data_idx === selected_idx) {
+                    selected_x = i;
+                    break;
+                }
+            }
+        }
+
+        data_idx = 0;
+        let perc = (selected_x / window.innerWidth) * 100;
+        for (let i=0; i<window.innerWidth; i++) {
+            let subperc = i / window.innerWidth;
+            while (axis_data[data_idx].percentage < perc + subperc) {
+                data_idx++;
+                if (data_idx === selected_idx2) {
+                    selected_x2 = i;
+                    break;
+                }
+            }
+        }
+
+        data_idx = 0;
+        perc = (selected_x / window.innerWidth) * 100 + (selected_x2 / window.innerWidth);
+        for (let i=0; i<window.innerWidth; i++) {
+            let subperc = i / window.innerWidth;
+            while (data_idx < axis_data.length && axis_data[data_idx].percentage < perc + subperc) {
+                data_idx++;
+                if (data_idx === selected_idx3) {
+                    selected_x3 = i;
+                    break;
+                }
+            }
+            if (data_idx >= axis_data.length) {
+                data_idx = axis_data.length - 1;
+            }
+        }
+    }
+
+    window.onresize = function () {
+        fix_selected_indexes();
+        update(selected_x);
+        update2(selected_x2);
+        update3(selected_x3);
+
+        thumbs.style.height = (window.innerHeight - 200) + 'px';
+        // update3(selected_x + (selected_x2 / window.innerWidth), y);
+        // update2(selected_x, y);
+        // update();
+
+        request_thumbs(true);
+    }
+
+    function handle(flag, mode, e) {
+        let x = e.clientX,
+            y = e.clientY;
+
+        if (flag) {
+            if (mode === 1) {
+                x = selected_x;
+            }
+            else if (mode === 2) {
+                x = selected_x2;
+            }
+            else if (mode === 3) {
+                x = selected_x3;
+            }
+        }
+
+        if (mode === 1) {
+            update2(x, y);
+        }
+        else if (mode === 2) {
+            update3(x, y);
+        }
+    }
+
+    function handle2(mode, e) {
+        let x = e.clientX,
+            y = e.clientY;
+        if (mode === 1) {
+            selected_x = x;
+        }
+        else if (mode === 2) {
+            selected_x2 = x;
+            update3(selected_x + (selected_x2 / window.innerWidth), y);
+        }
+        else if (mode === 3) {
+            selected_x3 = x;
+            update3(selected_x + (selected_x2 / window.innerWidth), y);
+            request_thumbs();
+        }
+        update2(selected_x, y);
+        update();
+    }
+
+    canvas.onmouseover = handle.bind(canvas, false, 1);
+    canvas.onmousemove = handle.bind(canvas, false, 1);
+    canvas.onmouseout = handle.bind(canvas, true, 1);
+    canvas.onmousedown = handle2.bind(canvas, 1);
+
+    canvas2.onmouseover = handle.bind(canvas2, false, 2);
+    canvas2.onmousemove = handle.bind(canvas2, false, 2);
+    canvas2.onmouseout = handle.bind(canvas2, true, 2);
+    canvas2.onmousedown = handle2.bind(canvas2, 2);
+
+    // canvas3.onmouseover = handle.bind(canvas3, false, 3);
+    // canvas3.onmousemove = handle.bind(canvas3, false, 3);
+    // canvas3.onmouseout = handle.bind(canvas3, true, 3);
+    canvas3.onmousedown = handle2.bind(canvas3, 3);
+
+</script>
+
+</body>
+</html>
+
