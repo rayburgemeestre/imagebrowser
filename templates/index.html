@@ -47,8 +47,15 @@
     let requested = -1;
     let num_files = 0;
 
-    function request_thumbs(force)
+    let first_index = 0;
+    let last_index = 0;
+
+    function request_thumbs(force, target)
     {
+        if (typeof target === 'undefined') {
+            target = 'next';
+        }
+
         let specific_index = 0;
         if (force) {
             specific_index = requested;
@@ -59,41 +66,39 @@
             if (selected_idx3 + 1 < axis_data.length) {
                 index2 = axis_data[selected_idx3 + 1].index;
             }
-                let data_idx = 0;
-                let perc = (selected_x / window.innerWidth) * 100 + (selected_x2 / window.innerWidth);
-                let x1 = 0;
-                let x2 = window.innerWidth;
-                for (let i = 0; i < window.innerWidth; i++) {
-                    let subperc = i / window.innerWidth;
-                    while (data_idx < axis_data.length && axis_data[data_idx].percentage < perc + subperc) {
-                        data_idx++;
-                        if (data_idx >= axis_data) {
-                            data_idx = axis_data.length - 1;
-                            break;
-                        }
-                        if (axis_data[selected_idx3] === axis_data[data_idx]) {
-                            console.log("found idx3: " + i);
-                            x1 = i;
-                        }
-                        if (selected_idx3 + 1 < axis_data.length) {
-                            if (axis_data[selected_idx3 + 1] === axis_data[data_idx]) {
-                                console.log("found idx3 + 1: " + i, "a", axis_data[data_idx], "b", axis_data[selected_idx3 + 1], "due to: ", axis_data[data_idx].percentage, " and ", perc, subperc);
-                                x2 = i;
-                            }
+            let data_idx = 0;
+            let perc = (selected_x / window.innerWidth) * 100 + (selected_x2 / window.innerWidth);
+            let x1 = 0;
+            let x2 = window.innerWidth;
+            for (let i = 0; i < window.innerWidth; i++) {
+                let subperc = i / window.innerWidth;
+                while (data_idx < axis_data.length && axis_data[data_idx].percentage < perc + subperc) {
+                    data_idx++;
+                    if (data_idx >= axis_data) {
+                        data_idx = axis_data.length - 1;
+                        break;
+                    }
+                    if (axis_data[selected_idx3] === axis_data[data_idx]) {
+                        x1 = i;
+                    }
+                    if (selected_idx3 + 1 < axis_data.length) {
+                        if (axis_data[selected_idx3 + 1] === axis_data[data_idx]) {
+                            x2 = i;
                         }
                     }
                 }
-                // hack, the 1nd pivot is out of the element
-                if (x1 === 0) {
-                    x1 = 0;
-                }
-                // hack, the 2nd pivot is out of the element
-                if (x2 === 0) {
-                    x2 = window.innerWidth;
-                }
-                let ratio = (selected_x3 - x1) / (x2 - x1);
-                specific_index = Math.floor((ratio * (index2 - index1)) + index1);
-                console.log(x1, x2, selected_x3, ratio, specific_index);
+            }
+            // hack, the 1nd pivot is out of the element
+            if (x1 === 0) {
+                x1 = 0;
+            }
+            // hack, the 2nd pivot is out of the element
+            if (x2 === 0) {
+                x2 = window.innerWidth;
+            }
+            let ratio = (selected_x3 - x1) / (x2 - x1);
+            specific_index = Math.floor((ratio * (index2 - index1)) + index1);
+            console.log(x1, x2, selected_x3, ratio, specific_index);
             //} else {
             //    specific_index = axis_data[selected_idx3].index; // we cannot estimate near the end..
             //}
@@ -104,16 +109,18 @@
             console.log("updating requested to: " + requested);
         }
         console.log("requesting thumbs for index: " + specific_index);
-        fetch('http://0.0.0.0:18080/get/' + specific_index + "/" + thumbs.clientWidth + "/" + thumbs.clientHeight + "/200/200")
+        fetch('http://0.0.0.0:18080/' + target + '/' + specific_index + "/" + thumbs.clientWidth + "/" + thumbs.clientHeight + "/200/200")
             .then(function (response) {
                 // Successfull fetch return as json
                 return response.json();
             })
             .then(function (data) {
                 // Data now contains the json
-
                 thumbs.innerHTML = '';
+                first_index = -1;
                 for (let img of data) {
+                    if (first_index === -1) { first_index = img.index; }
+                    last_index = img.index;
                     let img1 = document.createElement("img");
                     img1.width = img.width;
                     img1.height = img.height;
@@ -124,11 +131,22 @@
                     img1.src = "https://photoapp.cppse.nl/shadow_dir/" + img.url;
                     thumbs.appendChild(img1);
                 }
+                console.log("the indexes are: " + first_index + " - " + last_index);
             })
             .catch(function (error) {
                 // A Error occured
                 console.log(error);
             });
+    }
+
+    function prev() {
+        requested = first_index - 1;
+        request_thumbs(true, 'previous');
+    }
+
+    function next() {
+        requested = last_index + 1;
+        request_thumbs(true);
     }
 
 
@@ -287,6 +305,131 @@
                 // A Error occured
                 console.log(error);
             });
+    }
+
+    document.onkeyup = function (e) {
+        console.log(e.keyCode);
+        /* if (window.location.href.indexOf('nas:8081') == -1) {
+            console.log('You are not via the NAS url!');
+            return;
+        } */
+
+        // TODO, basically commented everything out for now
+
+        // var bindings = v.$data.bindings.split('\n');
+        // for (var binding of bindings) {
+        //     if (!binding.length) continue;
+        //     if (e.keyCode == binding[0].charCodeAt()) {
+        //         console.log('found tag: [' + binding.substr(2) + ']');
+        //         toggle_tag(document.querySelector('.mfp-img'), binding.substr(2));
+        //         save();
+        //         set_thumb_borders();
+        //         return;
+        //     }
+        // }
+
+        // let player = videojs('my-video');
+        switch (e.keyCode) {
+            case 106: // j down/(next)
+                // $.magnificPopup.proto.next();
+                // try {
+                //     var t = document.querySelector('.mfp-counter').innerText;
+                //     var c = t.split(' of ');
+                //     if (c[0] == '1') {
+                //         next();
+                //         console.log($.magnificPopup.proto);
+                //         //$.magnificPopup.proto.close();
+                //         //$.magnificPopup.proto.open();
+                //         // doesn't work.., see https://github.com/dimsemenov/Magnific-Popup/issues/67 as well as other issues
+                //         // found a workaround;
+                //         document.querySelector('#maximage img').click()
+                //         break;
+                //     }
+                // }
+                // catch (e) {
+                //     console.log(e);
+                // }
+                break;
+            case 107: // k up/ (previous)
+                // $.magnificPopup.proto.prev();
+                // try {
+                //     var t = document.querySelector('.mfp-counter').innerText;
+                //     var c = t.split(' of ');
+                //     console.log(c);
+                //     if (c[0] == c[1]) {
+                //         prev();
+                //         var os = document.querySelectorAll('#maximage img');
+                //         os[os.length - 1].click();
+                //         break;
+                //     }
+                // }
+                // catch (e) {
+                //     console.log(e);
+                // }
+                break;
+            case 114: // r (!rotate!)
+                // rot -= 90;
+                // rot = rot % 360;
+                // document.querySelector('.mfp-img').style.transform = 'rotate(' + rot + 'deg)';
+                break;
+            case 74: // J next set of images
+                next();
+                break;
+            case 75: // K previous set of images
+                prev();
+                break;
+            case 63: // ? for Help
+                // var o = document.querySelector('#help');
+                // console.log(o.style.display);
+                // if (o.style.display == '') {
+                //     o.style.display = 'block';
+                // }
+                // else {
+                //     o.style.display = '';
+                // }
+
+                break;
+            case 32: // space, pause video
+                // if (videojs('my-video').paused()) {
+                //     videojs('my-video').play();
+                // } else {
+                //     videojs('my-video').pause();
+                // }
+                break;
+            case 44: // , previous frame
+                // player.pause();
+                // player.currentTime(player.currentTime() - 1/60);
+                break;
+            case 46: // . next frame
+                // player.pause();
+                // player.currentTime(player.currentTime() + 1/60);
+                break;
+            case 80: // P process video
+                // if (document.getElementById('process_video').style.display == 'block') {
+                //     document.getElementById('process_video').style.display = 'none';
+                //     videojs('my-video').stop();
+                // } else {
+                //     document.getElementById('process_video').style.display = 'block';
+                //     if (currentVideoUrl.endsWith('.m2t')) {
+                //         currentVideoUrl = currentVideoUrl.substr(0, currentVideoUrl.length - 4) + '-shadow.mp4'
+                //         currentVideoUrl = currentVideoUrl.replace('original_dir', 'shadow_dir');
+                //     }
+                //     console.log('setting: ',currentVideoUrl);
+                //     videojs('my-video').src({src: currentVideoUrl});
+                //     //document.getElementById('file').innerHTML = currentVideoUrl;
+                //     //videojs('my-video').src({src: currentVideoUrl, type: 'video/mpeg2'});
+                //     // videojs('my-video').src('test.m3u8');
+                //     //videojs('my-video').play();
+                // }
+                break;
+            case 70: // F fullscreen
+                // if (!player.isFullscreen()) {
+                //     player.requestFullscreen();
+                // } else {
+                //     player.exitFullscreen();
+                // }
+                break;
+        }
     }
 
     function fix_selected_indexes()
