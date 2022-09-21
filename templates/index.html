@@ -16,6 +16,30 @@
             float: left;
         }
 
+        #current {
+            display: none;
+            width: 100%;
+            height: 100%;
+            background-color: #24404f;
+        }
+        #current.enabled {
+            display: block;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+
+        #process_video {
+            display: none;
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: grey;
+            z-index: 99999;
+        }
+
     </style>
 </head>
 <body>
@@ -50,7 +74,18 @@
     let first_index = 0;
     let last_index = 0;
 
-    function request_thumbs(force, target)
+    let current_img = null;
+
+    function update_current_image()
+    {
+        var real_url = current_img.getAttribute('real-url');
+        let obj = document.querySelector('#current img');
+        obj.src = real_url;
+        obj = document.querySelector('#current');
+        obj.className = 'enabled';
+    }
+
+    function request_thumbs(force, target, callback)
     {
         if (typeof target === 'undefined') {
             target = 'next';
@@ -128,10 +163,19 @@
                     img1.style.left = img.x + 'px';
                     img1.style.top = (img.y + 200) + 'px';
                     img1.style.backgroundColor = 'red';
-                    img1.src = "https://photoapp.cppse.nl/shadow_dir/" + img.url;
+                    img1.src = "https://photoapp.cppse.nl/shadow_dir/" + img.thumb_url;
+                    img1.setAttribute('real-url', "https://photoapp.cppse.nl/shadow_dir/" + img.url);
+                    if (img.thumb_url.endsWith('.gif')) {
+                        img1.setAttribute('video-url', "https://photoapp.cppse.nl/original_dir/" + img.url);
+                    }
+                    img1.onclick = function (e) {
+                        current_img = e.target;
+                        update_current_image();
+                    }
                     thumbs.appendChild(img1);
                 }
                 console.log("the indexes are: " + first_index + " - " + last_index);
+                if (callback) callback();
             })
             .catch(function (error) {
                 // A Error occured
@@ -139,16 +183,15 @@
             });
     }
 
-    function prev() {
+    function prev(callback) {
         requested = first_index - 1;
-        request_thumbs(true, 'previous');
+        request_thumbs(true, 'previous', callback);
     }
 
-    function next() {
+    function next(callback) {
         requested = last_index + 1;
-        request_thumbs(true);
+        request_thumbs(true, 'next', callback);
     }
-
 
     function update(x, y)
     {
@@ -307,6 +350,42 @@
             });
     }
 
+    function process_video(force) {
+        let currentVideoUrl = current_img && current_img.hasAttribute('video-url') ? current_img.getAttribute('video-url') : false;
+        if (!force && document.getElementById('process_video').style.display === 'block') {
+            document.getElementById('process_video').style.display = 'none';
+            videojs('my-video').pause();
+        } else {
+            if (currentVideoUrl) {
+                document.getElementById('process_video').style.display = 'block';
+                if (currentVideoUrl.endsWith('.m2t')) {
+                    currentVideoUrl = currentVideoUrl.substr(0, currentVideoUrl.length - 4) + '-shadow.mp4'
+                    currentVideoUrl = currentVideoUrl.replace('original_dir', 'shadow_dir');
+                }
+                console.log('setting: ', currentVideoUrl);
+                videojs('my-video').pause();
+                videojs('my-video').src({src: currentVideoUrl});
+                videojs('my-video').play();
+            } else {
+                // exit
+                videojs('my-video').pause();
+                document.getElementById('process_video').style.display = 'none';
+            }
+            //document.getElementById('file').innerHTML = currentVideoUrl;
+            //videojs('my-video').src({src: currentVideoUrl, type: 'video/mpeg2'});
+            // videojs('my-video').src('test.m3u8');
+            //videojs('my-video').play();
+        }
+    }
+    function process_video_if_needed() {
+        if (document.getElementById('process_video').style.display === 'block') {
+            console.log('processing video with force');
+            process_video(true);
+        } else {
+            console.log('nope');
+        }
+    }
+
     document.onkeyup = function (e) {
         console.log(e.keyCode);
         /* if (window.location.href.indexOf('nas:8081') == -1) {
@@ -328,55 +407,57 @@
         //     }
         // }
 
-        // let player = videojs('my-video');
-        switch (e.keyCode) {
-            case 106: // j down/(next)
-                // $.magnificPopup.proto.next();
-                // try {
-                //     var t = document.querySelector('.mfp-counter').innerText;
-                //     var c = t.split(' of ');
-                //     if (c[0] == '1') {
-                //         next();
-                //         console.log($.magnificPopup.proto);
-                //         //$.magnificPopup.proto.close();
-                //         //$.magnificPopup.proto.open();
-                //         // doesn't work.., see https://github.com/dimsemenov/Magnific-Popup/issues/67 as well as other issues
-                //         // found a workaround;
-                //         document.querySelector('#maximage img').click()
-                //         break;
-                //     }
-                // }
-                // catch (e) {
-                //     console.log(e);
-                // }
+        let player = videojs('my-video');
+        console.log(e);
+        switch (e.key) {
+            case 'j': // j down/(next)
+                if (current_img) {
+                    current_img = current_img.nextSibling;
+                    if (current_img) {
+                        update_current_image();
+                        process_video_if_needed();
+                    } else {
+                        next(function () {
+                            current_img = document.querySelector('#thumbnails img:first-child');
+                            update_current_image()
+                            process_video_if_needed();
+                        });
+                    }
+                }
                 break;
-            case 107: // k up/ (previous)
-                // $.magnificPopup.proto.prev();
-                // try {
-                //     var t = document.querySelector('.mfp-counter').innerText;
-                //     var c = t.split(' of ');
-                //     console.log(c);
-                //     if (c[0] == c[1]) {
-                //         prev();
-                //         var os = document.querySelectorAll('#maximage img');
-                //         os[os.length - 1].click();
-                //         break;
-                //     }
-                // }
-                // catch (e) {
-                //     console.log(e);
-                // }
+            case 'k': // k up/ (previous)
+                if (current_img) {
+                    current_img = current_img.previousSibling;
+                    if (current_img) {
+                        update_current_image();
+                        process_video_if_needed();
+                    } else {
+                        prev(function () {
+                            current_img = document.querySelector('#thumbnails img:last-child');
+                            update_current_image();
+                            process_video_if_needed();
+                        });
+                    }
+                }
                 break;
             case 114: // r (!rotate!)
                 // rot -= 90;
                 // rot = rot % 360;
                 // document.querySelector('.mfp-img').style.transform = 'rotate(' + rot + 'deg)';
                 break;
-            case 74: // J next set of images
+            case 'J': // J next set of images
                 next();
+                if (current_img) {
+                    current_img = document.querySelector('#thumbnails img:first-child');
+                    update_current_image();
+                }
                 break;
-            case 75: // K previous set of images
+            case 'K': // K previous set of images
                 prev();
+                if (current_img) {
+                    current_img = document.querySelector('#thumbnails img:last-child');
+                    update_current_image();
+                }
                 break;
             case 63: // ? for Help
                 // var o = document.querySelector('#help');
@@ -389,45 +470,33 @@
                 // }
 
                 break;
-            case 32: // space, pause video
-                // if (videojs('my-video').paused()) {
-                //     videojs('my-video').play();
-                // } else {
-                //     videojs('my-video').pause();
-                // }
+            case ' ': // space, pause video
+                if (videojs('my-video').paused()) {
+                    videojs('my-video').play();
+                } else {
+                    videojs('my-video').pause();
+                }
                 break;
-            case 44: // , previous frame
-                // player.pause();
-                // player.currentTime(player.currentTime() - 1/60);
+            case ',': // , previous frame
+                player.pause();
+                player.currentTime(player.currentTime() - 1/60);
                 break;
-            case 46: // . next frame
-                // player.pause();
-                // player.currentTime(player.currentTime() + 1/60);
+            case '.': // . next frame
+                player.pause();
+                player.currentTime(player.currentTime() + 1/60);
                 break;
-            case 80: // P process video
-                // if (document.getElementById('process_video').style.display == 'block') {
-                //     document.getElementById('process_video').style.display = 'none';
-                //     videojs('my-video').stop();
-                // } else {
-                //     document.getElementById('process_video').style.display = 'block';
-                //     if (currentVideoUrl.endsWith('.m2t')) {
-                //         currentVideoUrl = currentVideoUrl.substr(0, currentVideoUrl.length - 4) + '-shadow.mp4'
-                //         currentVideoUrl = currentVideoUrl.replace('original_dir', 'shadow_dir');
-                //     }
-                //     console.log('setting: ',currentVideoUrl);
-                //     videojs('my-video').src({src: currentVideoUrl});
-                //     //document.getElementById('file').innerHTML = currentVideoUrl;
-                //     //videojs('my-video').src({src: currentVideoUrl, type: 'video/mpeg2'});
-                //     // videojs('my-video').src('test.m3u8');
-                //     //videojs('my-video').play();
-                // }
+            case 'P': // P process video
+                process_video();
                 break;
-            case 70: // F fullscreen
-                // if (!player.isFullscreen()) {
-                //     player.requestFullscreen();
-                // } else {
-                //     player.exitFullscreen();
-                // }
+            case 'F': // F fullscreen
+                if (!player.isFullscreen()) {
+                    player.requestFullscreen();
+                } else {
+                    player.exitFullscreen();
+                }
+                break;
+            case 'Escape':
+                myclose();
                 break;
         }
     }
@@ -548,7 +617,71 @@
     // canvas3.onmouseout = handle.bind(canvas3, true, 3);
     canvas3.onmousedown = handle2.bind(canvas3, 3);
 
+    function myclose()
+    {
+        console.log('closing');
+        current_img = null;
+        document.querySelector('#current').className = '';
+    }
+
 </script>
+
+<div id="current">
+    <img src="" onclick="javascript:myclose();void(0);" />
+</div>
+
+<link href="https://vjs.zencdn.net/7.7.5/video-js.css" rel="stylesheet" />
+
+<!-- If you'd like to support IE8 (for Video.js versions prior to v7) -->
+<script src="https://vjs.zencdn.net/ie8/1.1.2/videojs-ie8.min.js"></script>
+
+<style type="text/css">
+    .video-js .vjs-time-control{display:block;}
+    .video-js .vjs-remaining-time{display: none;}
+</style>
+
+<div id="process_video" style="display: none;">
+    <center>
+  <video
+    id="my-video"
+    class="video-js"
+    controls
+    preload="auto"
+    width="1080"
+    height=""
+    data-setup='{ "inactivityTimeout": 0 }'
+  >
+    <p class="vjs-no-js">
+      To view this video please enable JavaScript, and consider upgrading to a
+      web browser that
+      <a href="https://videojs.com/html5-video-support/" target="_blank"
+        >supports HTML5 video</a
+      >
+    </p>
+  </video>
+</center>
+  <h1 class="title" id="time"></h1>
+  <h1 class="title" id="file"></h1>
+
+  <script src="https://vjs.zencdn.net/7.7.5/video.js"></script>
+    <!--
+  <script src="video.js"></script>
+  -->
+  <script>
+    videojs('my-video').on('timeupdate', function(){
+        var currentTime = this.currentTime();
+        var millisecs = currentTime - Math.floor(currentTime);
+        console.log('the time was updated to: ' + currentTime);
+        var strTime = new Date(this.currentTime() * 1000.0).toISOString().substr(11, 8);
+        strTime += '.' + Math.floor(millisecs * 1000);
+        document.querySelector('#time').innerHTML = strTime;
+    });
+    videojs('my-video').ready(function(){
+        this.play();
+    });
+  </script>
+</div>
+
 
 </body>
 </html>

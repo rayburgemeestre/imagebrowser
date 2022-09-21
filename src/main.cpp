@@ -1,6 +1,8 @@
 #include <fstream>
 #include <iostream>
 #include <regex>
+#include <set>
+
 #define CROW_JSON_USE_MAP
 #include "crow.h"
 
@@ -17,6 +19,14 @@ struct file {
   short month = 0;
   short day = 0;
 };
+
+void get_thumb_width(int max_thumb_width, int &thumb_width, int &thumb_height);
+
+void get_thumb_height(int max_thumb_height, int &thumb_width,
+                      int &thumb_height);
+
+std::string get_thumb_url(const std::string &input);
+
 std::vector<file> all_files_sorted;
 std::map<uint64_t, uint64_t> file_idx_lookup;
 
@@ -102,10 +112,6 @@ int main() {
 
   std::vector<crow::json::wvalue> vec;
 
-  //  78 typeset videos_find="-iname '*.mp4' -o -iname '*.mkv' -o -iname '*.mov'
-  //  -o -iname '*.m2t' -o -iname '*.avi' -or -type l -iname '*.mp4' -o -iname
-  //  '*.mkv' -o -iname '*.mov' -o -iname '*.m2t' -o -iname '*.avi'"
-
   for (auto &f : all_files_sorted) {
     if (f.year != year || f.month != month || f.day != day) {
       double perc = (double(index) / all_files_sorted.size()) * 100;
@@ -154,21 +160,13 @@ int main() {
     auto index = requested_index;
 
     while (index < all_files_sorted.size()) {
-      auto img = all_files_sorted[index];
-      auto s = files_lookup[img.id];
+      const auto &img = all_files_sorted[index];
+      const auto s = files_lookup[img.id];
       auto thumb_width = img.width;
       auto thumb_height = img.height;
 
-      // ensure that thumb width and height do not exceed max_thumb_width and
-      // max_thumb_height and keep aspect ratio
-      if (thumb_width > max_thumb_width) {
-        thumb_height = (thumb_height * max_thumb_width) / thumb_width;
-        thumb_width = max_thumb_width;
-      }
-      if (thumb_height > max_thumb_height) {
-        thumb_width = (thumb_width * max_thumb_height) / thumb_height;
-        thumb_height = max_thumb_height;
-      }
+      get_thumb_width(max_thumb_width, thumb_width, thumb_height);
+      get_thumb_height(max_thumb_height, thumb_width, thumb_height);
 
       if (x + thumb_width > width) {
         x = 0;
@@ -183,6 +181,7 @@ int main() {
                                         {"x", x},
                                         {"y", y},
                                         {"url", s},
+                                        {"thumb_url", get_thumb_url(s)},
                                         {"width", thumb_width},
                                         {"height", thumb_height}}));
 
@@ -207,19 +206,13 @@ int main() {
     int last_y = 0;
 
     while (index >= 0 && index < all_files_sorted.size()) {
-      auto img = all_files_sorted[index];
-      auto s = files_lookup[img.id];
-
+      const auto &img = all_files_sorted[index];
+      const auto s = files_lookup[img.id];
       auto thumb_width = img.width;
       auto thumb_height = img.height;
-      if (thumb_width > max_thumb_width) {
-        thumb_height = (thumb_height * max_thumb_width) / thumb_width;
-        thumb_width = max_thumb_width;
-      }
-      if (thumb_height > max_thumb_height) {
-        thumb_width = (thumb_width * max_thumb_height) / thumb_height;
-        thumb_height = max_thumb_height;
-      }
+
+      get_thumb_width(max_thumb_width, thumb_width, thumb_height);
+      get_thumb_height(max_thumb_height, thumb_width, thumb_height);
 
       if (x - thumb_width < 0) {
         x = width;
@@ -236,6 +229,7 @@ int main() {
                                         {"x", x - thumb_width},
                                         {"y", y - thumb_height},
                                         {"url", s},
+                                        {"thumb_url", get_thumb_url(s)},
                                         {"width", thumb_width},
                                         {"height", thumb_height}}));
 
@@ -249,8 +243,8 @@ int main() {
     // separately?
     //	or (auto& v : vec) {
     //		v["x"] = crow::json::rvalue(v["x"].nt()).operator int() +
-    // last_x; 		v["y"] = crow::json::rvalue(v["y"].nt()).operator int() +
-    // last_y;
+    // last_x; 		v["y"] = crow::json::rvalue(v["y"].nt()).operator int()
+    // + last_y;
     //
     crow::json::wvalue xx(vec);
     return xx;
@@ -259,4 +253,32 @@ int main() {
   app.port(18080).multithreaded().run();
 
   return 0;
+}
+
+void get_thumb_height(int max_thumb_height, int &thumb_width,
+                      int &thumb_height) {
+  if (thumb_height > max_thumb_height) {
+    thumb_width = (thumb_width * max_thumb_height) / thumb_height;
+    thumb_height = max_thumb_height;
+  }
+}
+
+void get_thumb_width(int max_thumb_width, int &thumb_width, int &thumb_height) {
+  if (thumb_width > max_thumb_width) {
+    thumb_height = (thumb_height * max_thumb_width) / thumb_width;
+    thumb_width = max_thumb_width;
+  }
+}
+
+std::string get_thumb_url(const std::string &input) {
+  static std::set<std::string> extensions = {".mp4", ".mkv", ".mov", ".m2t",
+                                             ".avi"};
+  auto ext = input.substr(input.find_last_of("."));
+  // convert ext to lower case
+  std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+  // if ext is in extensions, return input
+  if (extensions.find(ext) != extensions.end()) {
+    return input + ".gif";
+  }
+  return input;
 }
