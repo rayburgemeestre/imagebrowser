@@ -2,13 +2,19 @@
 <html>
 <head>
     <meta charset="utf-8">
+    <meta name="viewport" content="user-scalable=no,initial-scale=1,maximum-scale=1,minimum-scale=1,width=device-width">
 
     <style>
         html, body, #indexer { margin: 0; padding: 0;
             overflow-y: hidden;
             overflow-x: hidden;
         }
-        #thumbnails { background-color: #445e6d; clear: both; }
+        #thumbnails {
+            /* background-color: #445e6d; */
+            clear: both;
+            /*top: 50px;*/
+            /*position: relative;*/
+        }
 
         #indexer, #subindexer, #subsubindexer {
             margin: 0;
@@ -21,12 +27,62 @@
             width: 100%;
             height: 100%;
             background-color: #24404f;
+            text-align: center;
         }
         #current.enabled {
             display: block;
             position: absolute;
             top: 0;
             left: 0;
+        }
+
+        #current #current_tags {
+            position: absolute;
+            float: left;
+            top: 0px;
+            left: 0px;
+        }
+        #current #current_tags span {
+            background-color: yellow;
+        }
+
+        #current #filename {
+            position: absolute;
+            float: left;
+            left: 50%;
+            top: 0px;
+            background-color: yellow;
+        }
+
+        #current #orientation {
+            position: absolute;
+            float: left;
+            left: 50%;
+            top: 20px;
+            background-color: yellow;
+        }
+
+        #current img {
+            max-width: 100%;
+            max-height: 100%;
+        }
+        #floating_clicker div {
+            /*border: solid 1px green;*/
+            /*background-color: red;*/
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 50%;
+            height: 100%;
+        }
+        #floating_clicker div#right {
+            /*border: solid 1px green;*/
+            /*background-color: red;*/
+            position: absolute;
+            top: 0;
+            left: 50%;
+            width: 50%;
+            height: 100%;
         }
 
         #process_video {
@@ -40,6 +96,51 @@
             z-index: 99999;
         }
 
+        #filter_bar {
+            height: 50px;
+            background-color: blueviolet;
+            top: 200px;
+            width: 100%;
+            position: absolute;
+            clear: both;
+        }
+        #filter_bar .input {
+            float: left;
+        }
+        #filter_bar .preview {
+            background-color: green;
+        }
+        #filter_bar .selected {
+            background-color: yellow;
+        }
+
+
+        #tag_dialog {
+            height: 50px;
+            background-color: blueviolet;
+            top: 200px;
+            left: 0px;
+            width: 100%;
+            position: absolute;
+            clear: both;
+            display: none;
+        }
+        #tag_dialog .input {
+            float: left;
+        }
+        #tag_dialog .preview {
+            background-color: green;
+        }
+        #tag_dialog .selected {
+            background-color: yellow;
+        }
+
+        #info {
+            display: none;
+            position: absolute;
+            top: 10px;
+            background-color: gold;
+        }
     </style>
 </head>
 <body>
@@ -48,8 +149,21 @@
 <canvas id="subindexer"></canvas>
 <canvas id="subsubindexer"></canvas>
 
-<div id="thumbnails">
+<div id="filter_bar">
+    <input class="input" type="text" placeholder="Type tag here..." onkeyup="on_tag_keydown(this, event)">
+    <div class="preview">
+    </div>
+    <div class="selected">
+    </div>
+</div>
 
+<div id="thumbnails">
+</div>
+
+<div id="info">
+    first_index: <span id="first_index"></span>
+    last_index: <span id="last_index"></span>
+    requested: <span id="requested"></span>
 </div>
 
 <script>
@@ -61,6 +175,9 @@
     let ctx2 = canvas2.getContext("2d");
     let ctx3 = canvas3.getContext("2d");
     let axis_data = [];
+    let tags = [];
+    let tags_preview = [];
+    let tags_selected = [];
     let selected_x = 0;
     let selected_x2 = 0;
     let selected_x3 = 0;
@@ -75,14 +192,36 @@
     let last_index = 0;
 
     let current_img = null;
+    let top_padding_thumbs = 250;
+    let global_handler_enabled = true;
 
     function update_current_image()
     {
         var real_url = current_img.getAttribute('real-url');
-        let obj = document.querySelector('#current img');
+        var tags = current_img.getAttribute('tags');
+        var orientation = current_img.getAttribute('orientation');
+        tags = tags.substr(0, tags.length - 1);
+        tags = tags.split(";");
+        let h = '';
+        for (let tag of tags) {
+            if (!tag) continue;
+            h += '<span><span>Tag:<span>' + tag + '</span></span> <button onclick="remove_tag(this)">remove</button></span>';
+        }
+        let obj = document.querySelector('#current #current_tags');
+        obj.innerHTML = h;
+
+
+        obj = document.querySelector('#current img');
         obj.src = real_url;
         obj = document.querySelector('#current');
         obj.className = 'enabled';
+
+        console.log(orientation);
+        obj = document.querySelector('#current #orientation');
+        obj.innerText = orientation;
+
+        obj = document.querySelector('#current #filename');
+        obj.innerText = real_url;
     }
 
     function request_thumbs(force, target, callback)
@@ -144,7 +283,7 @@
             console.log("updating requested to: " + requested);
         }
         console.log("requesting thumbs for index: " + specific_index);
-        fetch('http://0.0.0.0:18080/' + target + '/' + specific_index + "/" + thumbs.clientWidth + "/" + thumbs.clientHeight + "/200/200")
+        fetch('http://192.168.2.25:18080/' + target + '/' + specific_index + "/" + thumbs.clientWidth + "/" + thumbs.clientHeight + "/200/200")
             .then(function (response) {
                 // Successfull fetch return as json
                 return response.json();
@@ -152,7 +291,9 @@
             .then(function (data) {
                 // Data now contains the json
                 thumbs.innerHTML = '';
+                first_index_bak = first_index;
                 first_index = -1;
+                console.log('retrieved: ' + data.length + ' images');
                 for (let img of data) {
                     if (first_index === -1) { first_index = img.index; }
                     last_index = img.index;
@@ -161,18 +302,33 @@
                     img1.height = img.height;
                     img1.style.position = 'absolute';
                     img1.style.left = img.x + 'px';
-                    img1.style.top = (img.y + 200) + 'px';
+                    img1.style.top = (img.y + top_padding_thumbs) + 'px';
                     img1.style.backgroundColor = 'red';
-                    img1.src = "https://photoapp.cppse.nl/shadow_dir/" + img.thumb_url;
-                    img1.setAttribute('real-url', "https://photoapp.cppse.nl/shadow_dir/" + img.url);
+                    let shadow_url = 'https://photoapp.cppse.nl/shadow_dir';
+                    let original_url = 'https://photoapp.cppse.nl/original_dir'
+                    // shadow_url = 'file:///mnt2/NAS/photos/DATA/2_shadow';
+                    // original_url = 'file:///mnt2/NAS/photos/DATA/2';
+                    shadow_url = '/img/preview';
+                    original_url = '/img/original'
+                    img1.src = shadow_url + "/" + encodeURIComponent(img.thumb_url);
                     if (img.thumb_url.endsWith('.gif')) {
-                        img1.setAttribute('video-url', "https://photoapp.cppse.nl/original_dir/" + img.url);
+                        img1.setAttribute('real-url', shadow_url + "/" + encodeURIComponent(img.url) + ".gif");
+                    } else {
+                        img1.setAttribute('real-url', shadow_url + "/" + encodeURIComponent(img.url));
+                    }
+                    img1.setAttribute('orientation', img.orientation);
+                    img1.setAttribute('tags', img.tags);
+                    if (img.thumb_url.endsWith('.gif')) {
+                        img1.setAttribute('video-url', original_url + "/" + encodeURIComponent(img.url));
                     }
                     img1.onclick = function (e) {
                         current_img = e.target;
                         update_current_image();
                     }
                     thumbs.appendChild(img1);
+                }
+                if (first_index === -1) {
+                    first_index = first_index_bak;
                 }
                 console.log("the indexes are: " + first_index + " - " + last_index);
                 if (callback) callback();
@@ -181,6 +337,9 @@
                 // A Error occured
                 console.log(error);
             });
+        document.getElementById('first_index').innerText = first_index;
+        document.getElementById('last_index').innerText = last_index;
+        document.getElementById('requested').innerText = requested;
     }
 
     function prev(callback) {
@@ -320,21 +479,25 @@
         }
     }
 
-    window.onload = function () {
-
-        thumbs.style.height = (window.innerHeight - 200) + 'px';
-        fetch('http://0.0.0.0:18080/num_images')
+    function initialize() {
+        fetch('http://192.168.2.25:18080/num_images')
             .then(function (response) {
                 return response.json();
             })
             .then(function (data) {
                 num_files = data;
+
+                // requested = num_files - 1;
+                first_index = num_files - 1;
+                last_index = num_files;
+                prev();
+                // request_thumbs(true, 'previous', undefined);
             })
             .catch(function (error) {
                 console.log(error);
             });
 
-        fetch('http://0.0.0.0:18080/get_time_indexes')
+        fetch('http://192.168.2.25:18080/get_time_indexes')
             .then(function (response) {
                 // Successfull fetch return as json
                 return response.json();
@@ -342,12 +505,45 @@
             .then(function (data) {
                 // Data now contains the json
                 axis_data = data;
+                // needed??
                 update();
+                // update2();
+                // update3();
             })
             .catch(function (error) {
                 // A Error occured
                 console.log(error);
             });
+
+        fetch('http://192.168.2.25:18080/get_tags')
+            .then(function (response) {
+                // Successfull fetch return as json
+                return response.json();
+            })
+            .then(function (data) {
+                tags = data;
+            })
+            .catch(function (error) {
+                console.log(error);
+            });
+
+        fetch('http://192.168.2.25:18080/get_selected_tags')
+            .then(function (response) {
+                return response.json();
+            })
+            .then(function (data) {
+                tags_selected = data;
+                update_tags();
+            })
+            .catch(function (error) {
+                console.log(error);
+            });
+    }
+
+    window.onload = function () {
+
+        thumbs.style.height = (window.innerHeight - top_padding_thumbs) + 'px';
+        initialize();
     }
 
     function process_video(force) {
@@ -386,7 +582,41 @@
         }
     }
 
+    function next_image()
+    {
+        if (current_img) {
+            current_img = current_img.nextSibling;
+            if (current_img) {
+                update_current_image();
+                process_video_if_needed();
+            } else {
+                next(function () {
+                    current_img = document.querySelector('#thumbnails img:first-child');
+                    update_current_image()
+                    process_video_if_needed();
+                });
+            }
+        }
+    }
+    function prev_image()
+    {
+        if (current_img) {
+            current_img = current_img.previousSibling;
+            if (current_img) {
+                update_current_image();
+                process_video_if_needed();
+            } else {
+                prev(function () {
+                    current_img = document.querySelector('#thumbnails img:last-child');
+                    update_current_image();
+                    process_video_if_needed();
+                });
+            }
+        }
+    }
+
     document.onkeyup = function (e) {
+        if (!global_handler_enabled) return;
         console.log(e.keyCode);
         /* if (window.location.href.indexOf('nas:8081') == -1) {
             console.log('You are not via the NAS url!');
@@ -410,35 +640,23 @@
         let player = videojs('my-video');
         console.log(e);
         switch (e.key) {
-            case 'j': // j down/(next)
-                if (current_img) {
-                    current_img = current_img.nextSibling;
-                    if (current_img) {
-                        update_current_image();
-                        process_video_if_needed();
-                    } else {
-                        next(function () {
-                            current_img = document.querySelector('#thumbnails img:first-child');
-                            update_current_image()
-                            process_video_if_needed();
-                        });
-                    }
+            case 't': // t tag
+                let o = document.getElementById('tag_dialog');
+                if (o.style.display != 'block') {
+                    o.style.display = 'block';
+                    o.getElementsByTagName('input')[0].focus();
+                    global_handler_enabled = false;
+                } else {
+                    o.style.display = '';
+                    global_handler_enabled = true;
                 }
+
+                break;
+            case 'j': // j down/(next)
+                next_image();
                 break;
             case 'k': // k up/ (previous)
-                if (current_img) {
-                    current_img = current_img.previousSibling;
-                    if (current_img) {
-                        update_current_image();
-                        process_video_if_needed();
-                    } else {
-                        prev(function () {
-                            current_img = document.querySelector('#thumbnails img:last-child');
-                            update_current_image();
-                            process_video_if_needed();
-                        });
-                    }
-                }
+                prev_image();
                 break;
             case 114: // r (!rotate!)
                 // rot -= 90;
@@ -551,7 +769,7 @@
         update2(selected_x2);
         update3(selected_x3);
 
-        thumbs.style.height = (window.innerHeight - 200) + 'px';
+        thumbs.style.height = (window.innerHeight - top_padding_thumbs) + 'px';
         // update3(selected_x + (selected_x2 / window.innerWidth), y);
         // update2(selected_x, y);
         // update();
@@ -624,10 +842,120 @@
         document.querySelector('#current').className = '';
     }
 
+    function on_tag_keydown(el, ev)
+    {
+        console.log(ev.keyCode);
+        console.log(document.querySelectorAll('input.input')[0].value);
+        ev.preventDefault();
+        update_tags();
+        return false;
+    }
+
+    function on_new_tag_keydown(el, ev) {
+        if (ev.keyCode == 27) { // esc
+            ev.preventDefault();
+            global_handler_enabled = true;
+            return false;
+        }
+        console.log(ev.keyCode);
+        console.log(document.querySelectorAll('input.input')[1].value);
+        ev.preventDefault();
+        //update_tags();
+        return false;
+    }
+
+    function update_tags(no_update) {
+        let preview = document.querySelector('#filter_bar .preview');
+        let selected = document.querySelector('#filter_bar .selected');
+
+        let matching_tags = [];
+        let h = '';
+        let query = document.querySelector('input.input').value;
+        for (let tag of tags) {
+            if (tags_selected.indexOf(tag) != -1) {
+                console.log('already selected');
+                continue;
+            }
+            if (query.length != 0 && tag.toLowerCase().indexOf(query.toLowerCase()) != -1) {
+                h += '<span><span>Tag:<span>' + tag + '</span></span> <button onclick="add_tag(this)">add</button></span>';
+            }
+        }
+        preview.innerHTML = h;
+
+        h = '';
+        for (let tag of tags_selected) {
+            h += '<span><span>Tag:<span>' + tag + '</span></span> <button onclick="del_tag(this)">del</button></span>';
+        }
+        selected.innerHTML = h;
+    }
+
+    function add_tag(el) {
+        tags_selected.push(el.parentNode.firstChild.lastChild.innerText);
+        update_tags();
+        fetch('http://192.168.2.25:18080/set_tags', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ tags: tags_selected })
+        })
+            .then(function (response) {
+                return response;
+            })
+            .then(function (data) {
+                console.log(data);  // You can handle the response data here if needed
+                initialize();
+            })
+            .catch(function (error) {
+                console.log(error);
+            });
+    }
+
+    function del_tag(el) {
+        let index = tags_selected.indexOf(el.parentNode.firstChild.lastChild.innerText);
+        if (index !== -1) {
+            tags_selected.splice(index, 1);
+        } else {
+            return;
+        }
+        update_tags();
+        fetch('http://192.168.2.25:18080/set_tags', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ tags: tags_selected })
+        })
+            .then(function (response) {
+                return response;
+            })
+            .then(function (data) {
+                console.log(data);  // You can handle the response data here if needed
+                initialize();
+            })
+            .catch(function (error) {
+                console.log(error);
+            });
+    }
+
 </script>
 
 <div id="current">
     <img src="" onclick="javascript:myclose();void(0);" />
+    <div id="floating_clicker">
+        <div id="left" onclick="prev_image()"></div>
+        <div id="right" onclick="next_image()"></div>
+    </div>
+    <span id="current_tags">TAGS HERE</span>
+    <span id="filename">filename</span>
+    <span id="orientation">orientation HERE</span>
+    <span id="tag_dialog">
+        <input class="input" type="text" placeholder="Type new tag here..." onkeyup="on_new_tag_keydown(this, event)">
+        <div class="preview">
+        </div>
+        <div class="selected">
+        </div>
+    </span>
 </div>
 
 <link href="https://vjs.zencdn.net/7.7.5/video-js.css" rel="stylesheet" />

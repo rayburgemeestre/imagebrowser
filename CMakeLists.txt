@@ -11,7 +11,7 @@ project(imagebrowser VERSION 0.1 LANGUAGES CXX)
 
 list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
 
-set(CLANGFORMAT_EXECUTABLE clang-format-12)
+set(CLANGFORMAT_EXECUTABLE clang-format)
 
 include(ClangFormat)
 
@@ -42,6 +42,7 @@ include_directories(
     "${CMAKE_CURRENT_SOURCE_DIR}/libs/crow/include"
 )
 
+link_directories("/usr/lib/llvm-10/lib/clang/10.0.0/lib/linux/")
 link_directories("/usr/lib/llvm-12/lib/clang/12.0.0/lib/linux/")
 
 # imagebrowser
@@ -57,8 +58,8 @@ target_link_libraries(imagebrowser PRIVATE -lpthread)
 
 if (SANITIZER)
     target_link_libraries(imagebrowser PRIVATE -lclang_rt.asan-x86_64)
-    target_link_libraries(mapmaker PRIVATE -lclang_rt.asan-x86_64)
-    target_link_libraries(server PRIVATE -lclang_rt.asan-x86_64)
+    # target_link_libraries(mapmaker PRIVATE -lclang_rt.asan-x86_64)
+    # target_link_libraries(server PRIVATE -lclang_rt.asan-x86_64)
 endif()
 
 install (TARGETS imagebrowser DESTINATION bin)
